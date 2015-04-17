@@ -35,19 +35,19 @@ module Calculatable
           player.result_info[:assect_change] = "0$"
         else
           dealer.asset -= player.bet * 1.5
-          player.asset += player.bet * 1.5
+          player.asset += player.bet * 2.5
           player.result_info[:assect_change] = "+#{player.bet * 1.5}$"
         end
       else
         if player.result_info[:result] == "win"
           dealer.asset -= player.bet
-          player.asset += player.bet
+          player.asset += player.bet * 2
           player.result_info[:assect_change] = "+#{player.bet}$"
         elsif player.result_info[:result] == "lose"
-          player.asset -= player.bet
           dealer.asset += player.bet
           player.result_info[:assect_change] = "-#{player.bet}$"
         elsif player.result_info[:result] == "tie"
+          player.asset += player.bet
           player.result_info[:assect_change] = "0$"
         else
           puts "There is a error occured in method: calculate_bet"
@@ -125,49 +125,57 @@ end
 class Player
   include Calculatable
   include Message
-  attr_accessor :name, :cards, :asset, :bet, :total, :result_info, :insurance
+  attr_accessor :name, :cards, :asset, :bet, :total, :result_info
   def initialize(name, asset = 500)
     self.name = name
     self.cards = []
-    self.asset = asset#
+    self.asset = asset
     self.bet = 0
     self.total = 0
-    self.result_info = {burst: false, result: "", blackjack: false, assect_change: ""}
-    self.insurance = 0
+    self.result_info = {burst: false, result: "", blackjack: false, assect_change: "", chose_double: false}
   end
 
   def choose
     begin
-      prompt "#{name}'s total: #{total}. Choose to 1)Hit 2)Stay : "
+      prompt "#{name}'s total: #{total}. Choose to 1)Hit 2)Stay 3)Double : "
       hit_or_stay = gets.chomp.to_i
-    end until [1, 2].include?hit_or_stay
+    end until [1, 2, 3].include?hit_or_stay
     hit_or_stay
   end
 
-  def betting
-    begin
-      prompt "#{name}'s asset: #{asset}$. Total: #{total}.\n"
-      prompt "Input bet: "
+  def place_bet
+    loop do
+      prompt "#{name}'s asset: #{asset}$. Place bet: "
       self.bet = gets.chomp.to_i
-    end until bet > 0 && asset >= bet
+      if bet > 0 && asset >= bet
+        break
+      else
+        puts "Your bet must great than your asset!"
+        next
+      end
+    end
+    self.asset -= bet
   end
 end
 
 class Game
   include Calculatable
   include Message
-  attr_accessor :decks, :dealer, :players, :result_info
+  attr_accessor :decks, :dealer, :players, :result_info, :all_player_name
   
   def initialize
     system "clear"
+    self.all_player_name = []
     self.players = []
     begin
       prompt "How many players are there?(1-7): "
       players_count = gets.chomp.to_i
     end until (1..7).include?players_count
     for i in (1..players_count) do
-      prompt "#{i}th player's name: "
-      self.players << Player.new(gets.chomp)
+      prompt "#{i}th player's name: " 
+      player = Player.new(gets.chomp)
+      self.players << player
+      self.all_player_name << player.name
     end
     self.decks = Deck.new(players_count)
     decks.shuffle_decks
@@ -176,18 +184,30 @@ class Game
 
   def play
     puts "GAME START..."
-    2.times { dealer.deal(dealer) }
+    announce "Players: #{all_player_name}"
+    # place_bet
     players.each do |player|
+      player.place_bet
+    end
+    # dealing a face up and a face down card
+    2.times do
+      dealer.deal(dealer)
+      players.each do |player|
+        dealer.deal(player) 
+      end
+    end
+    # Turing to player
+    players.each do |player|
+      puts ""
       announce "Turning to #{player.name}..."
       sleep(0.3)
-      announce "Dealer's cards: [\"X\", \"X\"], #{dealer.cards[1]}"
-      2.times { dealer.deal(player) }
+      announce "Dealer's cards: [[\"X\", \"X\"], #{dealer.cards[1]}]"
       announce "#{player.name}'s cards: #{player.cards}"
-      player.total = calculate_total_points(player.cards)
-      player.betting
+      # choose
       loop do
         hit_or_stay = player.choose
-        if hit_or_stay == 1
+        case hit_or_stay
+        when 1
           dealer.deal(player)
           announce "#{player.name}'s cards: #{player.cards}"
           player.total = calculate_total_points(player.cards)
@@ -203,20 +223,43 @@ class Game
           else
             next
           end
-        elsif hit_or_stay == 2
+        when 2
           player.result_info[:blackjack] = true if player.total == 21
           announce "Saving #{player.name}'s total..."
           sleep(0.5)
           break
+        when 3
+          if player.asset >= player.bet
+            player.asset -= player.bet
+            player.bet = 2 * player.bet
+            dealer.deal(player)
+            announce "#{player.name}'s cards: #{player.cards}"
+            if player.total > 21
+              player.result_info[:burst] = true
+              announce "#{player.name} bursted! (total: #{player.total})"
+            elsif player.total == 21
+              player.result_info[:blackjack] = true
+              announce "#{player.name} blackjack!"
+            end
+          else
+            announce "Sorry, you have not enough money!"
+            next
+          end
+          break
         end
       end
-      puts ""
     end
-    
     dealer.choose
     compare_with_dealer
     calculate_bet(dealer,players)
     display_bet_info
+    players.each do |player|
+      if player.asset == 0
+        announce "sorry, #{player.name} have not enough money! #{player.name} out!"
+        all_player_name.delete(player.name)
+      end
+    end
+    players.select!{ |player| all_player_name.include?player.name }
   end
 
 
@@ -287,6 +330,10 @@ end
 game = Game.new
 loop do
   game.play
+  if game.players.empty?
+    puts "GAME OVER..."
+    break
+  end
   print "continue?(y/n) : "
   yes_or_no = gets.chomp
   break unless yes_or_no == 'y'
