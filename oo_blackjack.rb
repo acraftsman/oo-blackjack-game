@@ -125,7 +125,7 @@ end
 class Player
   include Calculatable
   include Message
-  attr_accessor :name, :cards, :asset, :bet, :total, :result_info
+  attr_accessor :name, :cards, :asset, :bet, :total, :result_info, :is_hit
   def initialize(name, asset = 500)
     self.name = name
     self.cards = []
@@ -133,13 +133,23 @@ class Player
     self.bet = 0
     self.total = 0
     self.result_info = {burst: false, result: "", blackjack: false, assect_change: "", chose_double: false}
+    self.is_hit = false
   end
 
   def choose
+    str_arr = ["Choose to 1)Hit 2)Stay 3)Double : ", "Choose to 1)Hit 2)Stay : "]
+    index = 0
+    if is_hit
+      index = 1
+    end
+
     begin
-      prompt "#{name}'s total: #{total}. Choose to 1)Hit 2)Stay 3)Double : "
+      prompt "#{name}'s total: #{total}. #{str_arr[index]}"
       hit_or_stay = gets.chomp.to_i
     end until [1, 2, 3].include?hit_or_stay
+    if hit_or_stay == 1
+      self.is_hit = true
+    end
     hit_or_stay
   end
 
@@ -203,6 +213,13 @@ class Game
       sleep(0.3)
       announce "Dealer's cards: [[\"X\", \"X\"], #{dealer.cards[1]}]"
       announce "#{player.name}'s cards: #{player.cards}"
+      player.total = calculate_total_points(player.cards)
+      # blackjack
+      if player.total == 21
+        player.result_info[:blackjack] = true
+        announce "#{player.name} blackjack!"
+        next
+      end
       # choose
       loop do
         hit_or_stay = player.choose
@@ -229,6 +246,7 @@ class Game
           sleep(0.5)
           break
         when 3
+          player.result_info[:chose_double] = true
           if player.asset >= player.bet
             player.asset -= player.bet
             player.bet = 2 * player.bet
@@ -325,6 +343,12 @@ class Game
       player.result_info = {burst: false, result: "", blackjack: false, assect_change: ""}
     end
   end
+
+  def status_clear
+    players.each do |player|
+      player.is_hit = false
+    end
+  end
 end
 
 game = Game.new
@@ -338,5 +362,6 @@ loop do
   yes_or_no = gets.chomp
   break unless yes_or_no == 'y'
   game.reset
+  game.status_clear
 end
 
