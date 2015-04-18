@@ -26,7 +26,6 @@ class Deck
     @cards = []
     @count = count
     get_decks(count)
-    end
     scramble!
   end
 
@@ -45,8 +44,12 @@ class Deck
   end
 
   def deal_one
-    get_decks(count) if card.nil?
     card = cards.pop
+    if card.nil?
+      get_decks(count) 
+      card =cards.pop
+    end
+    card
   end
 
   def size
